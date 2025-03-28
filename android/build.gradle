@@ -1,20 +1,21 @@
+// En android/build.gradle
 buildscript {
     ext {
-        buildToolsVersion = "35.0.0"
+        buildToolsVersion = "34.0.0"  // Bajar a 34 en lugar de 35
         minSdkVersion = 24
-        compileSdkVersion = 35
-        targetSdkVersion = 35
-        ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.0.21"
+        compileSdkVersion = 34  // Bajar a 34
+        targetSdkVersion = 34   // Bajar a 34
+        ndkVersion = "26.1.10909125"  // Versión estable anterior
+        kotlinVersion = "1.9.0"  // Versión estable de Kotlin
     }
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle")
+        classpath("com.android.tools.build:gradle:8.1.4")  // Versión estable
         classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0")
     }
 }
 
