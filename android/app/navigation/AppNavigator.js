@@ -40,7 +40,7 @@ export default function App() {
  {/*      <NavigationContainer> */}
         <Stack.Navigator>
           <Stack.Screen name="Login" component={Login} />
-          <Stack.Screen name="Dashboard" component={MarcadasBiometria} />
+          <Stack.Screen name="Marcación" component={MarcadasBiometria} />
         </Stack.Navigator>
       {/* </NavigationContainer> */}
     </AuthProvider>

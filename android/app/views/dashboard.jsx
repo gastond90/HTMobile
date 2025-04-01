@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { 
   View, 
@@ -6,18 +5,28 @@ import {
   StyleSheet,
   TouchableOpacity, 
   Alert,
+  Image,
   TextInput,
   Button as RNButton,
   Modal, 
-  PermissionsAndroid
+  PermissionsAndroid,
+  Platform,
+/*   AsyncStorage */ // Using React Native's built-in AsyncStorage
 } from 'react-native';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import Geolocation from '@react-native-community/geolocation';
 import TouchID from 'react-native-touch-id';
 import DeviceInfo from 'react-native-device-info';
 import useAuth from '../hooks/useAuth';
+import { useNavigation } from '@react-navigation/native'
 
-export default function MarcadasBiometria ()  {
+// Constants for AsyncStorage keys
+const BIOMETRIC_REGISTERED_KEY = 'biometric_registered';
+const REGISTERED_DEVICE_ID_KEY = 'registered_device_id';
+
+export default function MarcadasBiometria() {
   const [userData, setUserData] = useState({});
   const [loading, setLoading] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -29,13 +38,11 @@ export default function MarcadasBiometria ()  {
   const [isIngreso, setIsIngreso] = useState(true);
   const [observacion, setObservacion] = useState("");
   const [registeredDeviceId, setRegisteredDeviceId] = useState(null);
+  const [currentDeviceId, setCurrentDeviceId] = useState(null);
   const { auth } = useAuth();
 
   useEffect(() => { setUserData(auth);}, [auth]);
 
-
-  
-  
   const [data, setData] = useState({
     Legajo: 0,
     Latitud: 0,
@@ -47,11 +54,44 @@ export default function MarcadasBiometria ()  {
     DeviceID: "",
   });
 
-  const key="3fb6aacd6bb44f059be39ffacedd90fd"
-  const apiUrl = `https://api.opencagedata.com/geocode/v1/json?key=${key}&q=${data.Latitud}+${data.Longitud}&pretty=1`;
+  const navigation = useNavigation(); 
+
+  const key = "3fb6aacd6bb44f059be39ffacedd90fd";
+  
+  // Load saved biometric registration status
+  const loadBiometricRegistration = async () => {
+    try {
+      const isRegisteredValue = await AsyncStorage.getItem(BIOMETRIC_REGISTERED_KEY);
+      const savedDeviceId = await AsyncStorage.getItem(REGISTERED_DEVICE_ID_KEY);
+      const currentId = await DeviceInfo.getUniqueId();
+      setCurrentDeviceId(currentId);
+      
+      if (isRegisteredValue === 'true' && savedDeviceId === currentId) {
+        setIsRegistered(true);
+        setRegisteredDeviceId(savedDeviceId);
+        console.log('Biometric registration loaded from storage');
+      } else {
+        // If device ID has changed, we need to re-register
+        setIsRegistered(false);
+        console.log('No biometric registration found or device changed');
+      }
+    } catch (error) {
+      console.error('Error loading biometric registration:', error);
+    }
+  };
+
+  // Save biometric registration status
+  const saveBiometricRegistration = async (deviceId) => {
+    try {
+      await AsyncStorage.setItem(BIOMETRIC_REGISTERED_KEY, 'true');
+      await AsyncStorage.setItem(REGISTERED_DEVICE_ID_KEY, deviceId);
+      console.log('Biometric registration saved to storage');
+    } catch (error) {
+      console.error('Error saving biometric registration:', error);
+    }
+  };
 
   useEffect(() => {
- 
     const updateFecha = () => {
       const now = new Date();
       setFecha(now.toLocaleString('es-ES', { 
@@ -79,18 +119,6 @@ export default function MarcadasBiometria ()  {
     }
   }, [userData, observacion]);
 
-  /* const reverseGeocode = async (lat, lon) => {
-    try {
-      const response = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-      if (response.length > 0) {
-        setBarrio(response[0].district || response[0].street || "Ubicación desconocida");
-      }
-    } catch (error) {
-      console.error("Error fetching location data:", error);
-    }
-  };
- */
-
   const reverseGeocode = async (lat, lon) => {
     const apiUrl = `https://api.opencagedata.com/geocode/v1/json?key=${key}&q=${lat}+${lon}&pretty=1`;
 
@@ -99,11 +127,11 @@ export default function MarcadasBiometria ()  {
       const data = await response.json();
 
       if (data.results && data.results.length > 0) {
-        const barrioName = data.results[0].components.district || data.results[0].components.street || "Ubicación desconocida";
+        const barrioName = data.results[0].components?.neighbourhood + " , " + data.results[0].components?.city || data.results[0].components?.city ||"Ubicación desconocida";
         setBarrio(barrioName);
       } else {
         console.log('No se encontró la ubicación');
-        setBarrio("Ubicación desconocida");
+        setBarrio(lat+ " , "+ lon);
       }
     } catch (error) {
       console.error("Error al obtener datos de la ubicación:", error);
@@ -115,6 +143,8 @@ export default function MarcadasBiometria ()  {
     if (data.Latitud && data.Longitud) {
       reverseGeocode(data.Latitud, data.Longitud);
     }
+
+    console.log('%cHT\android\app\views\dashboard.jsx:147 data.Latitud && data.Longitud', 'color: #007acc;', data.Latitud && data.Longitud);
   }, [data.Latitud, data.Longitud])
 
   const getLocation = async () => {
@@ -139,74 +169,46 @@ export default function MarcadasBiometria ()  {
             Longitud: position.coords.longitude,
             Precision: position.coords.accuracy
           }));
-          // Aquí necesitarás implementar reverseGeocode de otra manera
-          // Ya que expo-location no está disponible
         },
         (error) => {
           console.error("Error getting location:", error);
+          Alert.alert('Error', 'No se pudo obtener la ubicación');
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
     } catch (error) {
       console.error("Error getting location:", error);
+      Alert.alert('Error', 'No se pudo obtener la ubicación');
     } finally {
       setLoading(false);
     }
   };
   
   const checkBiometricSupport = async () => {
-    console.log("hola")
     try {
       TouchID.isSupported()
         .then(biometryType => {
           setBiometricSupported(true);
-          console.log('Biometric',biometryType);
+          console.log('Biometric supported:', biometryType);
         })
         .catch(error => {
           setBiometricSupported(false);
           console.log('Biometric not supported', error);
+          /* Alert.alert('Aviso', 'Este dispositivo no soporta autenticación biométrica'); */
         });
     } catch (error) {
       console.error('Error checking biometric support:', error);
+      setBiometricSupported(false);
     }
   };
 
   useEffect(() => {
+    // Initialize app
     getLocation();
     checkBiometricSupport();
-  }, []);
-
-  const registerBiometric = async () => {
-    try {
-      const result = await TouchID.authenticate('Registre su huella/rostro para marcaciones');
-      
-      if (result) {
-        const deviceId = await DeviceInfo.getUniqueId();
-        setRegisteredDeviceId(deviceId);
-        setIsRegistered(true);
-        Alert.alert('Éxito', 'Registro biométrico completado');
-      }
-    } catch (error) {
-      console.error('Error en registro biométrico:', error);
-      Alert.alert('Error', error.message || 'Error en el registro');
-    }
-  };
-
-  const verifyBiometric = async () => {
-    try {
-      const result = await TouchID.authenticate('Verifique su identidad');
-      
-      if (result) {
-        setBiometricVerified(true);
-        Alert.alert('Éxito', 'Verificación biométrica exitosa');
-      }
-    } catch (error) {
-      console.error('Error en verificación biométrica:', error);
-      Alert.alert('Error', 'Error en la verificación biométrica');
-    }
-  };
-
-  useEffect(() => {
+    loadBiometricRegistration(); // Load saved biometric registration status
+    
+    // Get device info
     (async () => {
       try {
         const uniqueId = await DeviceInfo.getUniqueId();
@@ -217,19 +219,62 @@ export default function MarcadasBiometria ()  {
       }
     })();
   }, []);
+
+  const registerBiometric = async () => {
+    try {
+      const result = await TouchID.authenticate('Registre su huella/rostro para marcaciones', {
+        fallbackLabel: 'Usar contraseña',
+        passcodeFallback: true
+      });
+      
+      if (result) {
+        const deviceId = await DeviceInfo.getUniqueId();
+        setRegisteredDeviceId(deviceId);
+        setIsRegistered(true);
+        
+        // Save registration status to AsyncStorage
+        await saveBiometricRegistration(deviceId);
+        
+        Alert.alert('Éxito', 'Registro biométrico completado y guardado en el dispositivo');
+      }
+    } catch (error) {
+      console.error('Error en registro biométrico:', error);
+      Alert.alert('Error', error.message || 'Error en el registro');
+    }
+  };
+
+  const verifyBiometric = async () => {
+    try {
+      const result = await TouchID.authenticate('Verifique su identidad', {
+        fallbackLabel: 'Usar contraseña',
+        passcodeFallback: true
+      });
+      
+      if (result) {
+        setBiometricVerified(true);
+        Alert.alert('Éxito', 'Verificación biométrica exitosa');
+      }
+    } catch (error) {
+      console.error('Error en verificación biométrica:', error);
+      Alert.alert('Error', 'Error en la verificación biométrica');
+    }
+  };
   
   const submit = async () => {
-    /* if (!biometricVerified) {
+    if (!biometricVerified && isRegistered) {
       Alert.alert('Error', 'Se requiere verificación biométrica');
       return;
-    } */
+    }
+    if (data.Longitud===0 || data.Latitud === 0) {
+      Alert.alert('Error', 'Ubicación no disponible. Por favor, intente nuevamente');
+      return;
+    }
     
     setLoading(true);
     try {
       const finalData = {
         ...data,
         Ingreso: isIngreso,
-        /* DeviceID: await getDeviceId() */
       };
       
       console.log('Enviando:', finalData);
@@ -246,9 +291,11 @@ export default function MarcadasBiometria ()  {
       
       if (!response.ok) {
         throw new Error('Error en la respuesta del servidor');
-      }
+      } */
       
-      setPopupVisible(true); */
+      // For demo purposes, we'll just show the success popup
+      setPopupVisible(true);
+     /*  Alert.alert('Success', 'Marcación registrada con éxito'); */
     } catch (error) {
       console.error('Error:', error);
       Alert.alert('Error', 'Error al registrar marcación');
@@ -256,6 +303,8 @@ export default function MarcadasBiometria ()  {
       setLoading(false);
     }
   };
+
+  console.log('isRegistered , !biometricVerified', isRegistered , !biometricVerified);
 
   return (
     <View style={styles.container}>
@@ -266,26 +315,25 @@ export default function MarcadasBiometria ()  {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalText}>Marcación Registrada</Text>
+            <Text style={styles.modalText}>Marcación Registrada ✅</Text>
             <RNButton 
               title="Aceptar"
-              onPress={() => setPopupVisible(false)}
+              onPress={()=>navigation.replace('Login')}
             />
           </View>
         </View>
       </Modal>
       
-      <View style={styles.header}>
+      {/* <View style={styles.header}>
         <Text style={styles.headerText}>Marcación</Text>
-      </View>
+      </View> */}
       
       <View style={styles.card}>
-        {/* <Image 
-          source={require('../../images/logo-hidrotec-perf256.png')} 
+        <Image 
+          source={require('../images/logo-hidrotec-perf256.png')} 
           style={styles.logo} 
           resizeMode="contain"
         />
-         */}
     
         <View style={styles.switchContainer}>
           <TouchableOpacity
@@ -310,8 +358,7 @@ export default function MarcadasBiometria ()  {
         
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Ubicación</Text>
-          <Text style={styles.value}>{/* data.Latitud.toFixed(2) + " , " + data.Longitud.toFixed(2) */barrio
-          }</Text>
+          <Text style={styles.value}>{barrio}</Text>
         </View>
         
         <View style={styles.inputContainer}>
@@ -322,7 +369,7 @@ export default function MarcadasBiometria ()  {
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Dispositivo</Text>
           <Text style={styles.value}>{data.DeviceID}</Text>
-        {  <Text style={styles.value}>{data.Dispositivo}</Text>}
+          <Text style={styles.value}>{data.Dispositivo}</Text>
         </View>
         
         <View style={styles.inputContainer}>
@@ -357,8 +404,14 @@ export default function MarcadasBiometria ()  {
           <RNButton
             title="ENVIAR"
             onPress={submit}
-            /* disabled={loading || !biometricVerified} */
+            disabled={loading || (!biometricVerified)}
             color="#4CAF50"
+          />
+
+          <RNButton
+            title="Volver"
+            onPress={()=>navigation.replace('Login')}
+            color="#0286c9"
           />
         </View>
       </View>
@@ -391,8 +444,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   logo: {
-    width: '75%',
-    height: 100,
+    width: '60%',
+ /*    height: 100, */
     alignSelf: 'center',
     marginBottom: 16,
   },
