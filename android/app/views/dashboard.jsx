@@ -11,11 +11,9 @@ import {
   Modal, 
   PermissionsAndroid,
   Platform,
-/*   AsyncStorage */ // Using React Native's built-in AsyncStorage
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import Geolocation from '@react-native-community/geolocation';
 import TouchID from 'react-native-touch-id';
 import DeviceInfo from 'react-native-device-info';
@@ -224,7 +222,8 @@ export default function MarcadasBiometria() {
     try {
       const result = await TouchID.authenticate('Registre su huella/rostro para marcaciones', {
         fallbackLabel: 'Usar contraseña',
-        passcodeFallback: true
+        passcodeFallback: true,
+        title: 'Autenticación biométrica',
       });
       
       if (result) {
@@ -247,7 +246,8 @@ export default function MarcadasBiometria() {
     try {
       const result = await TouchID.authenticate('Verifique su identidad', {
         fallbackLabel: 'Usar contraseña',
-        passcodeFallback: true
+        passcodeFallback: true,
+        title: 'Autenticación biométrica',
       });
       
       if (result) {
@@ -303,8 +303,6 @@ export default function MarcadasBiometria() {
       setLoading(false);
     }
   };
-
-  console.log('isRegistered , !biometricVerified', isRegistered , !biometricVerified);
 
   return (
     <View style={styles.container}>

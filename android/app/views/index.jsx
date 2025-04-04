@@ -1,30 +1,26 @@
 
 
 import { useCallback, useState, useEffect } from 'react';
-import { View, Alert, StyleSheet, TextInput, Image } from 'react-native';
-import { Button } from 'react-native';
+import { View, Alert, StyleSheet, TextInput, Image, Modal, Text, TouchableOpacity, Button } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TouchID from 'react-native-touch-id';
 import useAuth from '../hooks/useAuth';
-import { useNavigation } from '@react-navigation/native';
 
 export default function Login() {
+  const { setearAuth } = useAuth();
+  const navigation = useNavigation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
-  const { setearAuth } = useAuth();
-  const navigation = useNavigation();
   const [firstLoginDone, setFirstLoginDone] = useState(false); 
+  const [isPopupVisible, setPopupVisible] = useState(false);
+  const [recibirPassword, setRecibirPassword] = useState(null);
+  const [usuario, setUsuario] = useState({nombre:"",email:"",phone:"", });
+ 
+  const togglePopup = () => { setPopupVisible(prevState => !prevState);};
 
-  // Opciones para TouchID
-  const touchIDConfig = {
-    title: 'Autenticación biométrica', // Android
-    color: '#0286c9', // Android
-    fallbackLabel: 'Mostrar contraseña', // iOS (si es compatible)
-  };
-
-  // Verificar si TouchID/FaceID está disponible
   const checkBiometricAvailability = async () => {
     try {
       const biometryType = await TouchID.isSupported(touchIDConfig);
@@ -53,12 +49,10 @@ export default function Login() {
     checkSavedCredentials();
   }, []);
 
-  // Función para guardar credenciales
   const saveCredentials = async (user, pwd) => {
     try {
       await AsyncStorage.setItem('username', user);
       await AsyncStorage.setItem('password', pwd);
-      console.log('Credenciales guardadas exitosamente');
       return true;
     } catch (error) {
       console.error('Error al guardar credenciales:', error);
@@ -66,8 +60,7 @@ export default function Login() {
       return false;
     }
   };
-
-  // Función para obtener credenciales guardadas
+  
   const getSavedCredentials = async () => {
     try {
       const savedUsername = await AsyncStorage.getItem('username');
@@ -79,339 +72,148 @@ export default function Login() {
     }
   };
 
-  // Función para autenticación biométrica
   const promptBiometricAuth = async () => {
     try {
-      // Verificar si el dispositivo soporta biometría
       const isBiometricAvailable = await checkBiometricAvailability();
       
       if (!isBiometricAvailable) {
         Alert.alert('Error', 'Tu dispositivo no soporta autenticación biométrica');
         return;
       }
-
-      // Solicitar autenticación biométrica
       await TouchID.authenticate('Confirma tu identidad para iniciar sesión', touchIDConfig);
 
-      // Si la autenticación biométrica tuvo éxito, obtén credenciales guardadas
       const credentials = await getSavedCredentials();
       if (credentials && credentials.user && credentials.pwd) {
-        // Iniciar sesión con las credenciales guardadas
         loginWithCredentials(credentials.user, credentials.pwd);
       } else {
         Alert.alert('Error', 'No se encontraron credenciales guardadas');
       }
     } catch (error) {
       console.error('Error en autenticación biométrica:', error);
-      // No mostramos alerta aquí porque TouchID ya muestra sus propios mensajes de error
     }
   };
-
-  // Función para iniciar sesión con credenciales
-  /* const loginWithCredentials = async (user, pwd) => {
+  
+  const loginWithCredentials = async (user, pwd) => {
     setLoading(true);
 
     try {
-      const response = await fetch(`https://gestion1.hidrotecperf.com.ar/HT_WebAPI/api/login/authenticate_U`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user: user.toLowerCase(),
-          pwd: pwd
-        })
-      });
+        const response = await fetch(`https://gestion1.hidrotecperf.com.ar/HT_WebAPI/api/login/authenticate_U`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user: user.toLowerCase(),
+                pwd: pwd
+            })
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw {
-          status: response.status,
-          message: errorData.message || 'Error en la autenticación'
-        };
-      }
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw {
+                status: response.status,
+                message: errorData.message || 'Error en la autenticación'
+            };
+        }
 
-      const data = await response.json();
-      const { accessToken, userID, user: loggedUser, nombre: nombreU, NroLegajo } = data;
+        const data = await response.json();
+        const { accessToken, userID, user: loggedUser, nombre: nombreU, NroLegajo } = data;
 
-      setearAuth({
-        user: loggedUser,
-        userID,
-        accessToken,
-        nombreU,
-        NroLegajo,
-      });
+        setearAuth({
+            user: loggedUser,
+            userID,
+            accessToken,
+            nombreU,
+            NroLegajo,
+        });
 
-      navigation.replace('Marcación');
+        // Si aún no ha guardado credenciales, preguntar antes de navegar
+        if (!hasSavedCredentials) {
+            const isBiometricAvailable = await checkBiometricAvailability();
+            if (isBiometricAvailable) {
+                Alert.alert(
+                    'Guardar credenciales',
+                    '¿Deseas guardar tus credenciales para usar autenticación biométrica en el futuro?',
+                    [
+                        { text: 'No', style: 'cancel', onPress: () => navigation.replace('Marcación') },
+                        {
+                            text: 'Sí',
+                            onPress: async () => {
+                                const saved = await saveCredentials(user, pwd);
+                                if (saved) {
+                                    setHasSavedCredentials(true);
+                                    Alert.alert('Éxito', 'Credenciales guardadas. Ahora puedes usar la autenticación biométrica.', [
+                                        { text: 'OK', onPress: () => navigation.replace('Marcación') }
+                                    ]);
+                                } else {
+                                    navigation.replace('Marcación');
+                                }
+                            }
+                        }
+                    ]
+                );
+                return; // Evitar que se ejecute `navigation.replace('Marcación')` dos veces
+            }
+        }
+
+        navigation.replace('Marcación');
 
     } catch (err) {
-      console.error('Login error:', err);
-      let errorMessage = 'Error en el login';
-      
-      if (err.status === 401) {
-        errorMessage = 'Usuario o contraseña incorrectos';
-      } else if (err.status === 500) {
-        errorMessage = 'Error del servidor';
-      } else if (err.message?.includes('Network request failed')) {
-        errorMessage = 'Problema de conexión. Verifica tu internet';
-      }
+        console.error('Login error:', err);
+        let errorMessage = 'Error en el login';
 
-      Alert.alert('Error', errorMessage);
+        if (err.status === 401) {
+            errorMessage = 'Usuario o contraseña incorrectos';
+        } else if (err.status === 500) {
+            errorMessage = 'Error del servidor';
+        } else if (err.message?.includes('Network request failed')) {
+            errorMessage = 'Problema de conexión. Verifica tu internet';
+        }
+
+        Alert.alert('Error', errorMessage);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
-  // Función para manejar el inicio de sesión
   const handleLogin = useCallback(async () => {
     if (!username || !password) {
-      Alert.alert('Error', 'Por favor ingresa usuario y contraseña');
-      return;
-    }
-
-
-
-    if  (hasSavedCredentials) await loginWithCredentials(username, password);
-    
-    // Si el login fue exitoso (no salimos de la función por un error), pregunta si desea guardar las credenciales
-    if (!hasSavedCredentials) {
-      const isBiometricAvailable = await checkBiometricAvailability();
-      
-      if (isBiometricAvailable) {
-        Alert.alert(
-          'Guardar credenciales',
-          '¿Deseas guardar tus credenciales para usar autenticación biométrica en el futuro?',
-          [
-            {
-              text: 'No',
-              style: 'cancel'
-            },
-            {
-              text: 'Sí',
-              onPress: async () => {
-                const saved = await saveCredentials(username, password);
-                if (saved) {
-                  setHasSavedCredentials(true);
-                  Alert.alert('Éxito', 'Credenciales guardadas. Ahora puedes usar la autenticación biométrica.');
-                }
-              }
-            }
-          ]
-        );
-      }
-    }
-  }, [username, password, hasSavedCredentials]);
-   */
-  
-
-/*   const loginWithCredentials = async (user, pwd) => {
-    setLoading(true);
-
-    try {
-      const response = await fetch(`https://gestion1.hidrotecperf.com.ar/HT_WebAPI/api/login/authenticate_U`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: user.toLowerCase(), pwd })
-      });
-
-      if (!response.ok) {
-        let errorData = {};
-        try { errorData = await response.json(); } catch (error) { console.error('Error parsing JSON:', error); }
-        
-        throw {
-          status: response.status,
-          message: errorData.message || 'Error en la autenticación'
-        };
-      }
-
-      const data = await response.json();
-      const { accessToken, userID, user: loggedUser, nombre: nombreU, NroLegajo } = data;
-
-      setearAuth({ user: loggedUser, userID, accessToken, nombreU, NroLegajo });
-      navigation.replace('Marcación');
-
-      return true; 
-
-    } catch (err) {
-      console.error('Login error:', err);
-      let errorMessage = 'Error en el login';
-
-      if (err.status === 401) {
-        errorMessage = 'Usuario o contraseña incorrectos';
-      } else if (err.status === 500) {
-        errorMessage = 'Error del servidor';
-      } else if (err.message?.includes('Network request failed')) {
-        errorMessage = 'Problema de conexión. Verifica tu internet';
-      } else {
-        errorMessage = 'Error desconocido. Intenta de nuevo más tarde.';
-      }
-
-      Alert.alert('Error', errorMessage);
-      return false; // Indicar fallo
-    } finally {
-      setLoading(false);
-    }
-}; */
-
-
-const loginWithCredentials = async (user, pwd) => {
-  setLoading(true);
-
-  try {
-      const response = await fetch(`https://gestion1.hidrotecperf.com.ar/HT_WebAPI/api/login/authenticate_U`, {
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-              user: user.toLowerCase(),
-              pwd: pwd
-          })
-      });
-
-      if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw {
-              status: response.status,
-              message: errorData.message || 'Error en la autenticación'
-          };
-      }
-
-      const data = await response.json();
-      const { accessToken, userID, user: loggedUser, nombre: nombreU, NroLegajo } = data;
-
-      setearAuth({
-          user: loggedUser,
-          userID,
-          accessToken,
-          nombreU,
-          NroLegajo,
-      });
-
-      // Si aún no ha guardado credenciales, preguntar antes de navegar
-      if (!hasSavedCredentials) {
-          const isBiometricAvailable = await checkBiometricAvailability();
-          if (isBiometricAvailable) {
-              Alert.alert(
-                  'Guardar credenciales',
-                  '¿Deseas guardar tus credenciales para usar autenticación biométrica en el futuro?',
-                  [
-                      { text: 'No', style: 'cancel', onPress: () => navigation.replace('Marcación') },
-                      {
-                          text: 'Sí',
-                          onPress: async () => {
-                              const saved = await saveCredentials(user, pwd);
-                              if (saved) {
-                                  setHasSavedCredentials(true);
-                                  Alert.alert('Éxito', 'Credenciales guardadas. Ahora puedes usar la autenticación biométrica.', [
-                                      { text: 'OK', onPress: () => navigation.replace('Marcación') }
-                                  ]);
-                              } else {
-                                  navigation.replace('Marcación');
-                              }
-                          }
-                      }
-                  ]
-              );
-              return; // Evitar que se ejecute `navigation.replace('Marcación')` dos veces
-          }
-      }
-
-      navigation.replace('Marcación');
-
-  } catch (err) {
-      console.error('Login error:', err);
-      let errorMessage = 'Error en el login';
-
-      if (err.status === 401) {
-          errorMessage = 'Usuario o contraseña incorrectos';
-      } else if (err.status === 500) {
-          errorMessage = 'Error del servidor';
-      } else if (err.message?.includes('Network request failed')) {
-          errorMessage = 'Problema de conexión. Verifica tu internet';
-      }
-
-      Alert.alert('Error', errorMessage);
-  } finally {
-      setLoading(false);
-  }
-};
-
-
-/* const handleLogin = useCallback(async () => {
-    if (!username || !password) {
-      Alert.alert('Error', 'Por favor ingresa usuario y contraseña');
-      return;
+        Alert.alert('Error', 'Por favor ingresa usuario y contraseña');
+        return;
     }
 
     const success = await loginWithCredentials(username, password);
     
-    if (success && !hasSavedCredentials) {
-      const isBiometricAvailable = await checkBiometricAvailability();
-      
-      if (isBiometricAvailable) {
-        Alert.alert(
-          'Guardar credenciales',
-          '¿Deseas guardar tus credenciales para usar autenticación biométrica en el futuro?',
-          [
-            { text: 'No', style: 'cancel' },
-            {
-              text: 'Sí',
-              onPress: async () => {
-                const saved = await saveCredentials(username, password);
-                if (saved) {
-                  setHasSavedCredentials(true);
-                  Alert.alert('Éxito', 'Credenciales guardadas. Ahora puedes usar la autenticación biométrica.');
-                }
-              }
-            }
-          ]
-        );
-      }
+    if (success) {
+        setFirstLoginDone(true); // Marcar que el usuario ya hizo su primer login
     }
-}, [username, password, hasSavedCredentials]); */
+  }, [username, password]);
 
-
-const handleLogin = useCallback(async () => {
-  if (!username || !password) {
-      Alert.alert('Error', 'Por favor ingresa usuario y contraseña');
-      return;
-  }
-
-  const success = await loginWithCredentials(username, password);
-  
-  if (success) {
-      setFirstLoginDone(true); // Marcar que el usuario ya hizo su primer login
-  }
-}, [username, password]);
-
-
-
-useEffect(() => {
-  if (firstLoginDone && !hasSavedCredentials) {
-      checkBiometricAvailability().then((isBiometricAvailable) => {
-          if (isBiometricAvailable) {
-              Alert.alert(
-                  'Guardar credenciales',
-                  '¿Deseas guardar tus credenciales para usar autenticación biométrica en el futuro?',
-                  [
-                      { text: 'No', style: 'cancel' },
-                      {
-                          text: 'Sí',
-                          onPress: async () => {
-                              const saved = await saveCredentials(username, password);
-                              if (saved) {
-                                  setHasSavedCredentials(true);
-                                  Alert.alert('Éxito', 'Credenciales guardadas. Ahora puedes usar la autenticación biométrica.');
-                              }
-                          }
-                      }
-                  ]
-              );
-          }
-      });
-  }
-}, [firstLoginDone, hasSavedCredentials]);
+  useEffect(() => {
+    if (firstLoginDone && !hasSavedCredentials) {
+        checkBiometricAvailability().then((isBiometricAvailable) => {
+            if (isBiometricAvailable) {
+                Alert.alert(
+                    'Guardar credenciales',
+                    '¿Deseas guardar tus credenciales para usar autenticación biométrica en el futuro?',
+                    [
+                        { text: 'No', style: 'cancel' },
+                        {
+                            text: 'Sí',
+                            onPress: async () => {
+                                const saved = await saveCredentials(username, password);
+                                if (saved) {
+                                    setHasSavedCredentials(true);
+                                    Alert.alert('Éxito', 'Credenciales guardadas. Ahora puedes usar la autenticación biométrica.');
+                                }
+                            }
+                        }
+                    ]
+                );
+            }
+        });
+    }
+  }, [firstLoginDone, hasSavedCredentials]);
 
   // Función para borrar credenciales guardadas
   const clearSavedCredentials = async () => {
@@ -427,8 +229,138 @@ useEffect(() => {
     }
   };
 
+  // Recuperación de contraseña
+  const handleUsuario = (texto) => { setUsuario(prev => ({ ...prev, nombre: texto }))}
+
+  const getEmail = async (usuario) => {
+    const url = `https://gestion1.hidrotecperf.com.ar/HT_WebAPI/api/login/GetEmail?usuario=${encodeURIComponent(usuario)}`;
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',  // Cambié a GET
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error en la solicitud: ${response.status} - ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error en getEmail:', error);
+        throw error; // Lanza el error para manejarlo donde se llame
+    }
+  };
+
+  const getTelefono = async (usuario) => {
+    const url = `https://gestion1.hidrotecperf.com.ar/HT_WebAPI/api/login/GetPhone?usuario=${encodeURIComponent(usuario)}`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json'},
+        body: JSON.stringify({})
+    });
+
+    if (!response.ok) {
+        throw new Error(`Error en la solicitud: ${response.statusText}`);
+    }
+
+    return await response.json();
+  };
+
+  async function recoveryPass() {
+      setLoading(true);
+      console.log("acá")
+      const dataObject = { 
+          username: usuario.nombre.toLowerCase(), 
+          phone: usuario.phone, 
+          email: usuario.email 
+      };
+
+      const headers = { 'Content-Type': 'application/json' };
+      try {
+          const response = await fetch(`${API}/SendRecoveryPass`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(dataObject)
+          });
+
+          console.log("response",response)
+
+          if (!response.ok) { throw new Error(`Error en la solicitud: ${response.statusText}`);}
+
+        /*  const responseData = await response.text(); */
+
+          if (response.ok) {
+              Alert.alert(
+                  "Success", 
+                  `Se envió la nueva clave a ${
+                      usuario.phone !== "" 
+                          ? partiallyHideString(usuario.phone) 
+                          : partiallyHideString(usuario.email)
+                  }.`
+              );
+          }
+
+      } catch (error) {
+          console.error('Error:', error);
+      } finally {
+          setLoading(false);
+          togglePopup();
+      }
+  }
+
+  useEffect(() => {
+    if (usuario.nombre !== "") {
+      if (recibirPassword === "mail") {
+        getEmail(usuario.nombre)
+          .then(response => setUsuario(prev => ({
+            ...prev, email: response, phone:""})))
+          .catch(error => console.error(error));
+      } else if (recibirPassword === "telefono") {
+        getTelefono(usuario.nombre)
+          .then(response => setUsuario(prev => ({
+            ...prev, phone: response, email:""})))
+          .catch(error => console.error(error));
+      }
+    }
+  }, [usuario.nombre, recibirPassword]);
+  
+  useEffect(() => {
+    if ((usuario.email !== "" && recibirPassword === "mail") || (usuario.phone !== "" && recibirPassword === "telefono")) {
+      recoveryPass();
+      setRecibirPassword("");
+    }
+  }, [usuario.email, usuario.phone, recibirPassword]);
+
   return (
     <View style={styles.container}>
+      <Modal visible={isPopupVisible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+          <View style={styles.closeButtonContainer}>
+            <TouchableOpacity onPress={togglePopup} style={styles.closeButton}>
+              <Text style={styles.closeButton}>×</Text>
+            </TouchableOpacity>
+          </View>
+            <Text style={styles.title}>Indique donde quiere recibir su nueva contraseña</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nombre de usuario"
+              value={usuario.nombre}
+              onChangeText={handleUsuario}
+            />
+            <View style={styles.buttonsContainer}>
+              <TouchableOpacity style={styles.optionButton} onPress={() => setRecibirPassword('mail')}>
+                <Text style={styles.optionButtonText}>Email</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.optionButton} onPress={() => setRecibirPassword('telefono')}>
+                <Text style={styles.optionButtonText}>Teléfono</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Image 
         source={require('../images/logo-hidrotec-perf256.png')} 
         style={styles.logo} 
@@ -488,6 +420,10 @@ useEffect(() => {
           />
         </View>
       )}
+
+      <TouchableOpacity onPress={togglePopup}>
+        <Text style={styles.underlinedText}>¿Olvidaste tu clave?</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -500,14 +436,8 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#f5f5f5',
   },
- /*  logo: {
-    width: 200,
-    height: 100,
-    marginBottom: 30,
-  }, */
   logo: {
     width: '60%',
-    /* height: 100, */
     alignSelf: 'center',
     marginBottom: 16,
   },
@@ -531,4 +461,94 @@ const styles = StyleSheet.create({
   buttonSpacer: {
     height: 10,
   },
+  underlinedText: {
+    textDecorationLine: 'underline',
+    color: 'blue',
+    marginTop: 20,
+    cursor: 'pointer',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    width: '100%',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: 300,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  input: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 10,
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 10,
+  },
+  optionButton: {
+    flex: 1,
+    backgroundColor: '#007bff',
+    padding: 10,
+    marginHorizontal: 5,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  optionButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  closeButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    width: '100%',
+   /*  paddingRight: 10, */
+  },
+  closeButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });
+
+function partiallyHideString(inputString) {
+  if (inputString.includes('@')) {
+    // Handle email addresses
+    const parts = inputString.split('@');
+    const username = parts[0];
+    const domain = parts[1];
+    
+    const hiddenUsername = username.charAt(0) + '*'.repeat(username.length - 1);
+    
+    return hiddenUsername + '@' + domain;
+  } else {
+    // Handle phone numbers
+    const visibleLength = 3;
+    const hiddenPart = '*'.repeat(inputString.length - visibleLength) + inputString.slice(-visibleLength);
+    
+    return hiddenPart;
+  }
+}
+ const API = 'https://gestion1.hidrotecperf.com.ar/HT_WebAPI/api/login'
+ 
+ const touchIDConfig = {
+  title: 'Autenticación biométrica',
+  color: '#0286c9',
+  fallbackLabel: 'Mostrar contraseña', // iOS (si es compatible)
+};
