@@ -11,8 +11,8 @@ import {
   Modal, 
   PermissionsAndroid,
   Platform,
+  Linking
 } from 'react-native';
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Geolocation from '@react-native-community/geolocation';
 import TouchID from 'react-native-touch-id';
@@ -25,21 +25,21 @@ const BIOMETRIC_REGISTERED_KEY = 'biometric_registered';
 const REGISTERED_DEVICE_ID_KEY = 'registered_device_id';
 
 export default function MarcadasBiometria() {
+  const navigation = useNavigation();
+  const { auth } = useAuth();
   const [userData, setUserData] = useState({});
   const [loading, setLoading] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricVerified, setBiometricVerified] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
-  const [barrio, setBarrio] = useState("");
   const [fecha, setFecha] = useState("");
   const [isPopupVisible, setPopupVisible] = useState(false);
   const [isIngreso, setIsIngreso] = useState(true);
   const [observacion, setObservacion] = useState("");
   const [registeredDeviceId, setRegisteredDeviceId] = useState(null);
   const [currentDeviceId, setCurrentDeviceId] = useState(null);
-  const { auth } = useAuth();
-
-  useEffect(() => { setUserData(auth);}, [auth]);
+  const [GPS, setGPS] = useState();
+  const [recibosSinfirmar, setrecibosSinfirmar] = useState(false)
 
   const [data, setData] = useState({
     Legajo: 0,
@@ -51,11 +51,7 @@ export default function MarcadasBiometria() {
     Observacion: "",
     DeviceID: "",
   });
-
-  const navigation = useNavigation(); 
-
-  const key = "3fb6aacd6bb44f059be39ffacedd90fd";
-  
+     
   // Load saved biometric registration status
   const loadBiometricRegistration = async () => {
     try {
@@ -117,34 +113,6 @@ export default function MarcadasBiometria() {
     }
   }, [userData, observacion]);
 
-  const reverseGeocode = async (lat, lon) => {
-    const apiUrl = `https://api.opencagedata.com/geocode/v1/json?key=${key}&q=${lat}+${lon}&pretty=1`;
-
-    try {
-      const response = await fetch(apiUrl);
-      const data = await response.json();
-
-      if (data.results && data.results.length > 0) {
-        const barrioName = data.results[0].components?.neighbourhood + " , " + data.results[0].components?.city || data.results[0].components?.city ||"Ubicación desconocida";
-        setBarrio(barrioName);
-      } else {
-        console.log('No se encontró la ubicación');
-        setBarrio(lat+ " , "+ lon);
-      }
-    } catch (error) {
-      console.error("Error al obtener datos de la ubicación:", error);
-      setBarrio("Error al obtener la ubicación");
-    }
-  };
-
-  useEffect(() => {
-    if (data.Latitud && data.Longitud) {
-      reverseGeocode(data.Latitud, data.Longitud);
-    }
-
-    console.log('%cHT\android\app\views\dashboard.jsx:147 data.Latitud && data.Longitud', 'color: #007acc;', data.Latitud && data.Longitud);
-  }, [data.Latitud, data.Longitud])
-
   const getLocation = async () => {
     try {
       // Solicitar permisos para Android
@@ -156,6 +124,7 @@ export default function MarcadasBiometria() {
           Alert.alert('Permiso denegado', 'No se pudo acceder a la ubicación');
           return;
         }
+        if(granted){setGPS(true);}
       }
   
       setLoading(true);
@@ -304,124 +273,148 @@ export default function MarcadasBiometria() {
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Modal
-        visible={isPopupVisible}
-        transparent={true}
-        animationType="slide"
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalText}>Marcación Registrada ✅</Text>
-            <RNButton 
-              title="Aceptar"
-              onPress={()=>navigation.replace('Login')}
-            />
-          </View>
-        </View>
-      </Modal>
-      
-      {/* <View style={styles.header}>
-        <Text style={styles.headerText}>Marcación</Text>
-      </View> */}
-      
-      <View style={styles.card}>
-        <Image 
-          source={require('../images/logo-hidrotec-perf256.png')} 
-          style={styles.logo} 
-          resizeMode="contain"
-        />
-    
-        <View style={styles.switchContainer}>
-          <TouchableOpacity
-            style={[styles.switchOption, isIngreso && styles.switchOptionActive]}
-            onPress={() => setIsIngreso(true)}
-          >
-            <Text style={[styles.switchText, isIngreso && styles.switchTextActive]}>Ingreso</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.switchOption, !isIngreso && styles.switchOptionActive]}
-            onPress={() => setIsIngreso(false)}
-          >
-            <Text style={[styles.switchText, !isIngreso && styles.switchTextActive]}>Egreso</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Usuario</Text>
-          <Text style={styles.value}>{`${userData?.nombreU || ''} - Legajo N° ${userData?.NroLegajo || ''}`}</Text>
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Ubicación</Text>
-          <Text style={styles.value}>{barrio}</Text>
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Fecha</Text>
-          <Text style={styles.value}>{fecha}</Text>
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Dispositivo</Text>
-          <Text style={styles.value}>{data.DeviceID}</Text>
-          <Text style={styles.value}>{data.Dispositivo}</Text>
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Observación</Text>
-          <TextInput
-            style={styles.textInput}
-            value={observacion}
-            onChangeText={setObservacion}
-            placeholder="Ingrese observación"
-          />
-        </View>
-        
-        <View style={styles.buttonContainer}>
-          {biometricSupported && !isRegistered && (
-            <RNButton
-              title="REGISTRAR HUELLA/ROSTRO"
-              onPress={registerBiometric}
-              disabled={loading}
-              color="#007AFF"
-            />
-          )}
-          
-          {biometricSupported && isRegistered && !biometricVerified && (
-            <RNButton
-              title="VERIFICAR IDENTIDAD"
-              onPress={verifyBiometric}
-              disabled={loading}
-              color="#007AFF"
-            />
-          )}
-          
-          <RNButton
-            title="ENVIAR"
-            onPress={submit}
-            disabled={loading || (!biometricVerified)}
-            color="#4CAF50"
-          />
+  const firmar = () => {
+    const targetURL = 'https://hidrotec.turecibo.com/e/login';
+    Linking.openURL(targetURL).catch(err => console.error("Error al abrir la URL:", err));
+  };
 
-          <RNButton
-            title="Volver"
+  useEffect(() => {
+    if ( auth?.RecibosSinFirmar !== 0) { setrecibosSinfirmar(true) }
+  }, [auth]);
+
+  useEffect(() => { setUserData(auth);}, [auth]);
+
+return (
+  <View style={styles.container}>
+    <Modal
+      visible={isPopupVisible}
+      transparent={true}
+      animationType="slide"
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalText}>Marcación Registrada ✅</Text>
+          <RNButton 
+            title="Aceptar"
             onPress={()=>navigation.replace('Login')}
-            color="#0286c9"
           />
         </View>
       </View>
+    </Modal>
+
+      <Modal visible={recibosSinfirmar} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+          <View style={styles.closeButtonContainer}>
+            <TouchableOpacity onPress={()=>setrecibosSinfirmar(false)} style={styles.closeButton}>
+              <Text style={styles.closeButton}>×</Text>
+            </TouchableOpacity>
+          </View>
+            <Text style={styles.title}>Ud. tiene {auth?.RecibosSinFirmar} {auth?.RecibosSinFirmar === 1 ? 'recibo' : 'recibos'} sin firmar</Text>
+            <View style={styles.buttonsContainer}>
+              <TouchableOpacity style={styles.optionButton} onPress={()=>setrecibosSinfirmar(false)}>
+                <Text style={styles.optionButtonText}>Aceptar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.optionButton} onPress={firmar}>
+                <Text style={styles.optionButtonText}>Firmar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+    </Modal>
+    
+    <View style={styles.card}>
+    
+    <View style={styles.iconContainer}>
+      <Text>{GPS ? '📍' : '➖'}</Text>
     </View>
+      <Image 
+        source={require('../images/logo-hidrotec-perf256.png')} 
+        style={styles.logo} 
+        resizeMode="contain"
+      />
+  
+      <View style={styles.switchContainer}>
+        <TouchableOpacity
+          style={[styles.switchOption, isIngreso && styles.switchOptionActive]}
+          onPress={() => setIsIngreso(true)}
+        >
+          <Text style={[styles.switchText, isIngreso && styles.switchTextActive]}>Ingreso</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.switchOption, !isIngreso && styles.switchOptionActive]}
+          onPress={() => setIsIngreso(false)}
+        >
+          <Text style={[styles.switchText, !isIngreso && styles.switchTextActive]}>Egreso</Text>
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Usuario</Text>
+        <Text style={styles.value}>{`${userData?.nombreU || ''} - Legajo N° ${userData?.NroLegajo || ''}`}</Text>
+      </View>
+      
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Fecha</Text>
+        <Text style={styles.value}>{fecha}</Text>
+      </View>
+      
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Observación</Text>
+        <TextInput
+          style={styles.textInput}
+          value={observacion}
+          onChangeText={setObservacion}
+          placeholder="Ingrese observación"
+        />
+      </View>
+      
+      <View style={styles.buttonContainer}>
+        {biometricSupported && !isRegistered && (
+          <RNButton
+            title="REGISTRAR HUELLA/ROSTRO"
+            onPress={registerBiometric}
+            disabled={loading}
+            color="#007AFF"
+          />
+        )}
+        
+        {biometricSupported && isRegistered && !biometricVerified && (
+          <RNButton
+            title="VERIFICAR IDENTIDAD"
+            onPress={verifyBiometric}
+            disabled={loading}
+            color="#007AFF"
+          />
+        )}
+        
+        <RNButton
+          title="ENVIAR"
+          onPress={submit}
+          disabled={loading || (!biometricVerified)}
+          color="#4CAF50"
+        />
+
+        <RNButton
+          title="Volver"
+          onPress={()=>navigation.replace('Login')}
+          color="#0286c9"
+        />
+      </View>
+    </View>
+  </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: 'darkgray',
     padding: 16,
+    display: 'flex',
+    justifyContent: 'center',
+    alignContent: 'center',
   },
   header: {
     marginBottom: 16,
@@ -434,7 +427,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: 'white',
     borderRadius: 8,
-    padding: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -443,7 +436,6 @@ const styles = StyleSheet.create({
   },
   logo: {
     width: '60%',
- /*    height: 100, */
     alignSelf: 'center',
     marginBottom: 16,
   },
@@ -514,4 +506,49 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
   },
-});
+  iconContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    width: '100%',
+    padding: 8,
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 10,
+  },
+  closeButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    width: '100%',
+   /*  paddingRight: 10, */
+  },
+
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 10,
+  },
+  optionButton: {
+    flex: 1,
+    backgroundColor: '#007bff',
+    padding: 10,
+    marginHorizontal: 5,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  optionButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  
+});                 

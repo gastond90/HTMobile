@@ -39,8 +39,8 @@ export default function App() {
     <AuthProvider> 
  {/*      <NavigationContainer> */}
         <Stack.Navigator>
-          <Stack.Screen name="Login" component={Login} />
-          <Stack.Screen name="Marcación" component={MarcadasBiometria} />
+          <Stack.Screen name="Login" component={Login} options={{ headerShown: false }}/>
+          <Stack.Screen name="Marcación" component={MarcadasBiometria} options={{ headerShown: false }} />
         </Stack.Navigator>
       {/* </NavigationContainer> */}
     </AuthProvider>

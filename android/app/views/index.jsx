@@ -1,7 +1,7 @@
 
 
 import { useCallback, useState, useEffect } from 'react';
-import { View, Alert, StyleSheet, TextInput, Image, Modal, Text, TouchableOpacity, Button } from 'react-native';
+import { View, Alert, StyleSheet, TextInput, Image, Modal, Text, TouchableOpacity, Button,ImageBackground  } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TouchID from 'react-native-touch-id';
@@ -117,7 +117,7 @@ export default function Login() {
         }
 
         const data = await response.json();
-        const { accessToken, userID, user: loggedUser, nombre: nombreU, NroLegajo } = data;
+        const { accessToken, userID, user: loggedUser, nombre: nombreU, NroLegajo,RecibosSinFirmar } = data;
 
         setearAuth({
             user: loggedUser,
@@ -125,6 +125,7 @@ export default function Login() {
             accessToken,
             nombreU,
             NroLegajo,
+            RecibosSinFirmar: Number(RecibosSinFirmar)
         });
 
         // Si aún no ha guardado credenciales, preguntar antes de navegar
@@ -333,6 +334,11 @@ export default function Login() {
   }, [usuario.email, usuario.phone, recibirPassword]);
 
   return (
+  <ImageBackground 
+    source={{ uri: 'https://hidrotecperf.com.ar/wallpaper1.png' }} 
+    style={styles.background}
+    resizeMode="cover"
+  >
     <View style={styles.container}>
       <Modal visible={isPopupVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
@@ -368,32 +374,41 @@ export default function Login() {
       />
       
       {hasSavedCredentials ? (
-        <View style={styles.biometricContainer}>
+        <View style={styles.formContainer}>
           <TextInput
             style={styles.input}
             placeholder="Usuario"
             value={username}
             editable={false}
           />
-          <Button 
-            title="Iniciar sesión con huella" 
-            onPress={promptBiometricAuth} 
-            color="#0286c9"
+          <TouchableOpacity
+            style={styles.buttonStyle}
+            onPress={promptBiometricAuth}
             disabled={loading}
-          />
-          <View style={styles.buttonSpacer} />
-         {/*  <Button 
+          >
+            <Text style={styles.buttonText}>Iniciar sesión con huella</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.buttonStyle}
+            onPress={() => setHasSavedCredentials(false)}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>Iniciar sesión con clave</Text>
+          </TouchableOpacity>
+        </View>
+       /*<View style={styles.biometricContainer}>
+          <Button 
             title="Usar otra cuenta" 
             onPress={() => setHasSavedCredentials(false)} 
             color="#888888"
           />
-          <View style={styles.buttonSpacer} />
           <Button 
             title="Eliminar datos guardados" 
             onPress={clearSavedCredentials} 
             color="#d9534f"
-          /> */}
-        </View>
+          />
+        </View> */
       ) : (
         <View style={styles.formContainer}>
           <TextInput
@@ -425,6 +440,7 @@ export default function Login() {
         <Text style={styles.underlinedText}>¿Olvidaste tu clave?</Text>
       </TouchableOpacity>
     </View>
+  </ImageBackground>
   );
 }
 
@@ -434,7 +450,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f5f5f5',
+  },
+  background: {
+    flex: 1,
   },
   logo: {
     width: '60%',
@@ -463,9 +481,11 @@ const styles = StyleSheet.create({
   },
   underlinedText: {
     textDecorationLine: 'underline',
-    color: 'blue',
+    color: 'white',
     marginTop: 20,
     cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   modalContainer: {
     flex: 1,
@@ -486,14 +506,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     textAlign: 'center',
-  },
-  input: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 10,
   },
   buttonsContainer: {
     flexDirection: 'row',
@@ -525,6 +537,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+  buttonStyle : {
+  backgroundColor: '#0286c9',
+  padding: 12,
+  paddingVertical: 8,
+  borderRadius: 6,
+  alignItems: 'center',
+  marginBottom: 10,
+  /* width: '20px', */
+  },
+  
+   buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+   fontSize: 12,
+  }
 });
 
 function partiallyHideString(inputString) {
